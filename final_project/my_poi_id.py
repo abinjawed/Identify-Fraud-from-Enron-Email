@@ -5,6 +5,7 @@ import pickle
 import pandas as pd
 import numpy as np
 from scipy import stats
+from sklearn import preprocessing
 from sklearn import model_selection
 from sklearn.decomposition import PCA
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
@@ -19,6 +20,10 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 from sklearn.svm import SVC
 from sklearn.tree import DecisionTreeClassifier
+from sklearn.preprocessing import FunctionTransformer, minmax_scale
+
+
+import matplotlib.pyplot as plt
 
 sys.path.append("../tools/")
 
@@ -46,54 +51,129 @@ df = df[features_list]
 df['poi'] = df['poi'].astype('uint8')
 df = df.replace("NaN", np.nan, regex=True)
 
-
-# df = df.apply(pd.to_numeric)
-
-def remove_outlier(df_in):
-    q1 = df_in.quantile(0.25)
-    q3 = df_in.quantile(0.75)
-    iqr = q3 - q1
-    fence_low = q1 - 1.5 * iqr
-    fence_high = q3 + 1.5 * iqr
-    df_out = df_in[(df_in > fence_low) & (df_in < fence_high)]
-    return df_out
-
-
 d_poi = df['poi']
 
 df = df.drop(['poi'], axis=1)
-df = df.apply(remove_outlier, axis=0)
-df['poi'] = d_poi
 df = df.fillna(0)
+
+#pt = PowerTransformer(method='box-cox', standardize=False)
+rng = np.random.RandomState(304)
+
+fig = plt.figure()
+
+# plt.subplot(2, 2, 1)
+# plt.scatter(df["salary"], df["bonus"])
+# plt.xlabel("Salary")
+# plt.ylabel("Bonus")
+#
+# plt.subplot(2, 2, 2)
+# plt.scatter(df["total_payments"], df["expenses"])
+# plt.xlabel("Total Payments")
+# plt.ylabel("Expenses")
+#
+# plt.subplot(2, 2, 3)
+# plt.scatter(df["total_stock_value"], df["deferred_income"])
+# plt.xlabel("Total Stock Value")
+# plt.ylabel("Deferred Income")
+#
+# plt.subplot(2, 2, 4)
+# plt.scatter(df["from_poi_to_this_person"], df["from_this_person_to_poi"])
+# plt.xlabel("From POI to this person")
+# plt.ylabel("From this person to POI")
+#
+# plt.show()
+
+
+df = df[10000000 > df["bonus"]]
+df = df[df["total_payments"] < 10000000]
+
+# fig = plt.figure()
+# #
+# plt.subplot(2, 2, 1)
+# plt.hist(df["bonus"])
+# plt.title("Bonus")
+#
+# plt.subplot(2, 2, 2)
+# plt.hist(df["salary"])
+# plt.title("Salary")
+# #
+#
+# plt.subplot(2, 2, 3)
+# plt.hist(df["total_payments"])
+# plt.title("Total Payments")
+# #
+# plt.subplot(2, 2, 4)
+# plt.hist(df["expenses"])
+# plt.title("Expenses")
+#
+# #
+# plt.show()
+
+# df["bonus"] = np.sqrt(df["bonus"])
+# df["salary"] = np.sqrt(df["salary"])
+# df["total_payments"] = np.sqrt(df["total_payments"])
+# df["expenses"] = np.sqrt(df["expenses"])
+
+df = df.apply(np.sqrt, axis = 1)
+
+# fig = plt.figure()
+# #
+# plt.subplot(2, 2, 1)
+# plt.hist(df["bonus"])
+# plt.title("Bonus")
+#
+# plt.subplot(2, 2, 2)
+# plt.hist(df["salary"])
+# plt.title("Salary")
+# #
+#
+# plt.subplot(2, 2, 3)
+# plt.hist(df["total_payments"])
+# plt.title("Total Payments")
+# #
+# plt.subplot(2, 2, 4)
+# plt.hist(df["expenses"])
+# plt.title("Expenses")
+#
+# #
+# plt.show()
+
+
+from sklearn.preprocessing import PolynomialFeatures
+
+poly = PolynomialFeatures(2)
+#df = poly.fit_transform(df)
+#df = pd.DataFrame(df)
 
 ### Task 3: Create new feature(s)
 ### Store to my_dataset for easy export below.
+df['poi'] = d_poi
+df = df.fillna(0)
+#df["salary/bonus"] = df["salary"]/df["bonus"]
+#df[['salary/bonus']] = df[['salary']].div(df.bonus, axis=0)
+df['salary_bonus_ratio'] = df.salary.div(df.bonus)
+df.loc[~np.isfinite(df['salary_bonus_ratio']), 'salary_bonus_ratio'] = 0
+
+df['salary_expense_ratio'] = df.salary.div(df.expenses)
+df.loc[~np.isfinite(df['salary_expense_ratio']), 'salary_expense_ratio'] = 0
+
 my_dataset = df.to_dict(orient='index')
 
 ### Extract features and labels from dataset for local testing
 data = featureFormat(my_dataset, features_list, sort_keys=True)
 labels, features = targetFeatureSplit(data)
 
-# print (features)
-
-### Task 4: Try a varity of classifiers
-### Please name your classifier clf for easy export below.
-### Note that if you want to do PCA or other multi-stage operations,
-### you'll need to use Pipelines. For more info:
-### http://scikit-learn.org/stable/modules/pipeline.html
-
-# Provided to give you a starting point. Try a variety of classifiers.
 from sklearn.naive_bayes import GaussianNB
 
 from sklearn.linear_model import LogisticRegression
 
 nb_Clf = Pipeline([('scaling', StandardScaler()),
-                   ('pca', PCA(n_components=2, whiten=True)),
+                   ('pca', PCA(n_components=3, whiten=True)),
                    ('clf', GaussianNB())])
 
 l_Clf = Pipeline([('scaling', StandardScaler()),
                   ('pca', PCA(n_components=2, whiten=True)),
-                  ('clf', LogisticRegression())])
+                  ('clf', LogisticRegression(max_iter=1000, penalty='l1'))])
 
 svm_Clf = Pipeline([('scaling', StandardScaler()),
                     ('pca', PCA(n_components=2, whiten=True)),
@@ -104,12 +184,12 @@ knn_Clf = Pipeline([('scaling', StandardScaler()),
                     ('clf', KNeighborsClassifier())])
 
 lda_Clf = Pipeline([('scaling', StandardScaler()),
-                    ('pca', PCA(n_components=2, whiten=True)),
-                    ('clf', LinearDiscriminantAnalysis())])
+                    ('pca', PCA(n_components=4, whiten=True)),
+                    ('clf', LinearDiscriminantAnalysis(solver='lsqr', shrinkage='auto', n_components=7))])
 
 rf_Clf = Pipeline([('scaling', StandardScaler()),
                    ('pca', PCA(n_components=2, whiten=True)),
-                   ('clf', RandomForestClassifier(max_depth=2, random_state=0))])
+                   ('clf', RandomForestClassifier())])
 
 models = []
 models.append(('LR', l_Clf))
@@ -140,13 +220,17 @@ for name, model in models:
 ### function. Because of the small size of the dataset, the script uses
 ### stratified shuffle split cross validation. For more info:
 ### http://scikit-learn.org/stable/modules/generated/sklearn.cross_validation.StratifiedShuffleSplit.html
+test_classifier(nb_Clf, my_dataset, features_list)
+test_classifier(l_Clf, my_dataset, features_list)
+test_classifier(lda_Clf, my_dataset, features_list)
+test_classifier(rf_Clf, my_dataset, features_list)
 
 # Example starting point. Try investigating other evaluation techniques!
-clf = RandomForestClassifier(max_depth=100, min_samples_split=2)
-test_classifier(clf, my_dataset, features_list)
+# clf = RandomForestClassifier(max_depth=200, min_samples_split=4)
+# test_classifier(clf, my_dataset, features_list)
 
 ### Task 6: Dump your classifier, dataset, and features_list so anyone can
 ### check your results. You do not need to change anything below, but make sure
 ### that the version of poi_id.py that you submit can be run on its own and
 ### generates the necessary .pkl files for validating your results.
-dump_classifier_and_data(clf, my_dataset, features_list)
+dump_classifier_and_data(rf_Clf, my_dataset, features_list)
